@@ -37,5 +37,6 @@ func main() {
 		ReadTimeout:  15 * time.Second,
 	}
 
+	fmt.Printf("Listening on %s\n", s.Addr)
 	log.Fatal(s.ListenAndServe())
 }
