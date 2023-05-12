@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -12,7 +13,9 @@ import (
 	"github.com/rs/cors"
 )
 
-type options struct{}
+type options struct {
+	Port int `short:"p" long:"port" env:"PORT" description:"port to listen on" default:"8080"`
+}
 
 func main() {
 	var opt options
@@ -24,12 +27,12 @@ func main() {
 	r.HandleFunc("/v1/outofoffice", o.HandleSlackRequest)
 
 	cr := cors.New(cors.Options{
-		AllowedOrigins: []string{"http://localhost:3000"},
+		AllowedOrigins: []string{"*.vmware.com"},
 	})
 
 	s := &http.Server{
 		Handler:      cr.Handler(r),
-		Addr:         "127.0.0.1:8080",
+		Addr:         fmt.Sprintf("0.0.0.0:%d", opt.Port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
