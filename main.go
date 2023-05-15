@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dtimm/ooobot/pkg/ooobot"
+	"github.com/sashabaranov/go-openai"
 
 	"github.com/gorilla/mux"
 	"github.com/jessevdk/go-flags"
@@ -15,14 +16,16 @@ import (
 )
 
 type options struct {
-	Port int `short:"p" long:"port" env:"PORT" description:"port to listen on" default:"8080"`
+	Port     int    `short:"p" long:"port" env:"PORT" description:"port to listen on" default:"8080"`
+	APIToken string `short:"t" long:"api-token" env:"OPENAI_API_KEY" description:"OpenAI API token"`
 }
 
 func main() {
 	var opt options
 	flags.Parse(&opt)
 
-	o := ooobot.New()
+	c := openai.NewClient(opt.APIToken)
+	o := ooobot.New(c)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/outofoffice", o.HandleOutRequest)

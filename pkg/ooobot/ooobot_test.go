@@ -10,9 +10,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/dtimm/ooobot/pkg/ooobot"
+	"github.com/dtimm/ooobot/pkg/ooobot/ooobotfakes"
 )
 
 var _ = Describe("Ooobot", func() {
+	var apiMock *ooobotfakes.FakeChatCompletionRequester
 	pacificTime, _ := time.LoadLocation("America/Los_Angeles")
 	var (
 		o                 *ooobot.Ooobot
@@ -21,14 +23,15 @@ var _ = Describe("Ooobot", func() {
 		activeTimeFixture = time.Date(2020, 1, 1, 12, 0, 0, 0, pacificTime)
 	)
 
-	Describe("New", func() {
-		It("returns a new instance of Ooobot", func() {
-			Expect(ooobot.New()).To(BeAssignableToTypeOf(&ooobot.Ooobot{}))
-		})
+	BeforeEach(func() {
+		apiMock = &ooobotfakes.FakeChatCompletionRequester{}
+		o = ooobot.New(apiMock)
 	})
 
-	BeforeEach(func() {
-		o = ooobot.New()
+	Describe("New", func() {
+		It("returns a new instance of Ooobot", func() {
+			Expect(o).To(BeAssignableToTypeOf(&ooobot.Ooobot{}))
+		})
 	})
 
 	Describe("HandleOutRequest", func() {

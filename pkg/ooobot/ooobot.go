@@ -1,6 +1,7 @@
 package ooobot
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,13 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-)
 
-type Ooobot struct {
-	sync.Mutex
-	out      []Out
-	timezone *time.Location
-}
+	"github.com/sashabaranov/go-openai"
+)
 
 type Out struct {
 	Channel string
@@ -23,11 +20,23 @@ type Out struct {
 	Start   time.Time
 	End     time.Time
 }
+type Ooobot struct {
+	sync.Mutex
+	out      []Out
+	timezone *time.Location
+	ChatCompletionRequester
+}
 
-func New() *Ooobot {
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 . ChatCompletionRequester
+type ChatCompletionRequester interface {
+	CreateChatCompletion(context.Context, openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error)
+}
+
+func New(r ChatCompletionRequester) *Ooobot {
 	pacificTime, _ := time.LoadLocation("America/Los_Angeles")
 	return &Ooobot{
-		timezone: pacificTime,
+		timezone:                pacificTime,
+		ChatCompletionRequester: r,
 	}
 }
 
@@ -93,10 +102,26 @@ func (o *Ooobot) HandleWhosOutRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := values.Get("response_url")
 	outList := o.GetOut(time.Now())
-	s := strings.NewReader(fmt.Sprintf(`{"text": "%+v\n"}`, outList))
-	http.Post(u, "application/json", s)
+	sb := strings.Builder{}
+	for _, out := range outList {
+		if out.Channel != values.Get("channel_id") {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(outString(out))
+	}
+	if sb.Len() == 0 {
+		sb.WriteString("No one is currently out of office.")
+	}
+
+	go func() {
+		s := strings.NewReader(fmt.Sprintf(`{"text": "%s"}`, o.makeItFunny(sb.String())))
+		u := values.Get("response_url")
+		http.Post(u, "application/json", s)
+	}()
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -140,6 +165,37 @@ func (o *Ooobot) GetOut(t time.Time) []Out {
 	}
 
 	return r
+}
+
+func outString(out Out) string {
+	start := out.Start.Format("2006-01-02")
+	end := out.End.Format("2006-01-02")
+
+	if start == end {
+		return fmt.Sprintf("<@%s> out of the office on %s.", out.User, start)
+	}
+
+	return fmt.Sprintf("<@%s> out of the office from %s to %s.", out.User, out.Start.Format("2006-01-02"), out.End.Format("2006-01-02"))
+}
+
+func (o *Ooobot) makeItFunny(s string) string {
+	fmt.Printf("making '%s' funny\n", s)
+	resp, err := o.ChatCompletionRequester.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Temperature: 0.7,
+			Model:       openai.GPT4,
+			Messages: []openai.ChatCompletionMessage{{
+				Role:    openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf("Make up creative and humerous reasons for the following: %s", s),
+			}},
+		},
+	)
+
+	if err != nil {
+		return s
+	}
+	return resp.Choices[0].Message.Content
 }
 
 func parseText(t string) (string, string, error) {
