@@ -18,16 +18,10 @@ type Ooobot struct {
 }
 
 type Out struct {
-	Channel  string
-	Username string
-	Start    time.Time
-	End      time.Time
-}
-
-type request struct {
-	SlackName string `json:"slack_name"`
-	FirstDate string `json:"start_date"`
-	LastDate  string `json:"end_date"`
+	Channel string
+	User    string
+	Start   time.Time
+	End     time.Time
 }
 
 func New() *Ooobot {
@@ -37,7 +31,7 @@ func New() *Ooobot {
 	}
 }
 
-func (o *Ooobot) HandleSlackRequest(w http.ResponseWriter, r *http.Request) {
+func (o *Ooobot) HandleOutRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -61,9 +55,12 @@ func (o *Ooobot) HandleSlackRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	channel := values.Get("channel_id")
+	user := values.Get("user_id")
+
 	err = o.AddOut(
-		values.Get("channel_name"),
-		values.Get("user_name"),
+		channel,
+		user,
 		start,
 		end,
 	)
@@ -73,10 +70,38 @@ func (o *Ooobot) HandleSlackRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u := values.Get("response_url")
+	s := strings.NewReader(fmt.Sprintf(`{"text": "set <@%s> out of office from %s to %s"}`, user, start, end))
+	http.Post(u, "application/json", s)
+
 	w.WriteHeader(http.StatusOK)
 }
 
-func (o *Ooobot) AddOut(channel, name, start, end string) error {
+func (o *Ooobot) HandleWhosOutRequest(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "error reading body: %s\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	values, err := url.ParseQuery(string(b))
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "error parsing query: %s\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	u := values.Get("response_url")
+	outList := o.GetOut(time.Now())
+	s := strings.NewReader(fmt.Sprintf(`{"text": "%+v\n"}`, outList))
+	http.Post(u, "application/json", s)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (o *Ooobot) AddOut(channel, user, start, end string) error {
 	o.Lock()
 	defer o.Unlock()
 
@@ -90,13 +115,15 @@ func (o *Ooobot) AddOut(channel, name, start, end string) error {
 	}
 
 	out := Out{
-		Channel:  channel,
-		Username: name,
-		Start:    s,
-		End:      e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
+		Channel: channel,
+		User:    user,
+		Start:   s,
+		End:     e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
 	}
 
 	o.out = append(o.out, out)
+
+	fmt.Printf("added <@%s> out from %s to %s\n", user, start, end)
 
 	return nil
 }

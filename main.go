@@ -25,7 +25,8 @@ func main() {
 	o := ooobot.New()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/outofoffice", o.HandleSlackRequest)
+	r.HandleFunc("/v1/outofoffice", o.HandleOutRequest)
+	r.HandleFunc("/v1/whosout", o.HandleWhosOutRequest)
 
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		fmt.Printf("req url: %s\n", req.URL)
