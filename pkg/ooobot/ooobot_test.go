@@ -98,6 +98,26 @@ var _ = Describe("Ooobot", func() {
 			})
 		})
 
+		Context("with the same request multiple times", func() {
+			BeforeEach(func() {
+				b := bytes.NewBuffer([]byte(`token=fake_val&team_id=fake_val&team_domain=fake_val&channel_id=test_channel_id&channel_name=test_channel_name&user_id=test_user_id&user_name=test_user&command=%2Foutofoffice&text=2020-01-01&api_app_id=fake_val&is_enterprise_install=true&response_url=fake_val`))
+
+				rr = httptest.NewRecorder()
+				req := httptest.NewRequest("POST", "/v1/outofoffice", b)
+
+				o.HandleOutRequest(rr, req)
+
+				b = bytes.NewBuffer([]byte(`token=fake_val&team_id=fake_val&team_domain=fake_val&channel_id=test_channel_id&channel_name=test_channel_name&user_id=test_user_id&user_name=test_user&command=%2Foutofoffice&text=2020-01-01+2020-01-02&api_app_id=fake_val&is_enterprise_install=true&response_url=fake_val`))
+				req = httptest.NewRequest("POST", "/v1/outofoffice", b)
+
+				o.HandleOutRequest(rr, req)
+			})
+
+			It("stores the request", func() {
+				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements(outFixture))
+			})
+		})
+
 		Context("with no body", func() {
 			var rr *httptest.ResponseRecorder
 			BeforeEach(func() {

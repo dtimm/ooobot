@@ -148,17 +148,38 @@ func (o *Ooobot) AddOut(channel, user, start, end string) error {
 		End:     e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
 	}
 
-	for d := s; !d.After(e); d = d.AddDate(0, 0, 1) {
-		if _, ok := o.out[d.Format("2006-01-02")]; !ok {
-			o.out[d.Format("2006-01-02")] = []Out{out}
-		} else {
-			o.out[d.Format("2006-01-02")] = append(o.out[d.Format("2006-01-02")], out)
-		}
-	}
+	o.addRange(s, e, out)
 
 	fmt.Printf("added <@%s> out from %s to %s\n", user, start, end)
 
 	return nil
+}
+
+func (o *Ooobot) addRange(s, e time.Time, out Out) {
+	for d := s; !d.After(e); d = d.AddDate(0, 0, 1) {
+		if _, ok := o.out[d.Format("2006-01-02")]; !ok {
+			o.out[d.Format("2006-01-02")] = []Out{out}
+		} else {
+			if o.alreadyOut(out.User, d) {
+				continue
+			}
+			o.out[d.Format("2006-01-02")] = append(o.out[d.Format("2006-01-02")], out)
+		}
+	}
+}
+
+func (o *Ooobot) alreadyOut(user string, t time.Time) bool {
+	outs, ok := o.out[t.Format("2006-01-02")]
+	if !ok {
+		return false
+	}
+	for _, out := range outs {
+		if out.User == user {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (o *Ooobot) GetOut(t time.Time) []Out {
