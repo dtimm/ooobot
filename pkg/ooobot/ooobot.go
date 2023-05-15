@@ -1,9 +1,12 @@
 package ooobot
 
 import (
-	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,9 +18,10 @@ type Ooobot struct {
 }
 
 type Out struct {
-	SlackName string
-	Start     time.Time
-	End       time.Time
+	Channel  string
+	Username string
+	Start    time.Time
+	End      time.Time
 }
 
 type request struct {
@@ -37,19 +41,34 @@ func (o *Ooobot) HandleSlackRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
+		fmt.Fprintf(os.Stdout, "error reading body: %s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	var req request
-	err = json.Unmarshal(b, &req)
+	values, err := url.ParseQuery(string(b))
 	if err != nil {
+		fmt.Fprintf(os.Stdout, "error parsing query: %s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	err = o.AddOut(req.SlackName, req.FirstDate, req.LastDate)
+	t := values.Get("text")
+	start, end, err := parseText(t)
 	if err != nil {
+		fmt.Fprintf(os.Stdout, "error parsing text: %s\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = o.AddOut(
+		values.Get("channel_name"),
+		values.Get("user_name"),
+		start,
+		end,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "error adding out: %s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -57,7 +76,7 @@ func (o *Ooobot) HandleSlackRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (o *Ooobot) AddOut(name, start, end string) error {
+func (o *Ooobot) AddOut(channel, name, start, end string) error {
 	o.Lock()
 	defer o.Unlock()
 
@@ -71,9 +90,10 @@ func (o *Ooobot) AddOut(name, start, end string) error {
 	}
 
 	out := Out{
-		SlackName: name,
-		Start:     s,
-		End:       e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
+		Channel:  channel,
+		Username: name,
+		Start:    s,
+		End:      e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
 	}
 
 	o.out = append(o.out, out)
@@ -93,4 +113,15 @@ func (o *Ooobot) GetOut(t time.Time) []Out {
 	}
 
 	return r
+}
+
+func parseText(t string) (string, string, error) {
+	s := strings.Split(t, " ")
+	if len(s) == 2 {
+		return s[0], s[1], nil
+	} else if len(s) == 1 {
+		return s[0], s[0], nil
+	}
+
+	return "", "", fmt.Errorf("invalid text: %s", t)
 }
