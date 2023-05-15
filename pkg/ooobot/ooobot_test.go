@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sashabaranov/go-openai"
 
 	"github.com/dtimm/ooobot/pkg/ooobot"
 	"github.com/dtimm/ooobot/pkg/ooobot/ooobotfakes"
@@ -17,14 +18,29 @@ var _ = Describe("Ooobot", func() {
 	var apiMock *ooobotfakes.FakeChatCompletionRequester
 	pacificTime, _ := time.LoadLocation("America/Los_Angeles")
 	var (
-		o                 *ooobot.Ooobot
-		startDateFixture  = time.Date(2020, 1, 1, 0, 0, 0, 0, pacificTime)
-		endDateFixture    = time.Date(2020, 1, 1, 23, 59, 59, 0, pacificTime)
-		activeTimeFixture = time.Date(2020, 1, 1, 12, 0, 0, 0, pacificTime)
+		o                   *ooobot.Ooobot
+		startDateFixture    = time.Date(2020, 1, 1, 0, 0, 0, 0, pacificTime)
+		endDateFixture      = time.Date(2020, 1, 1, 23, 59, 59, 0, pacificTime)
+		laterEndDateFixture = time.Date(2020, 1, 2, 23, 59, 59, 0, pacificTime)
+		activeTimeFixture   = time.Date(2020, 1, 1, 12, 0, 0, 0, pacificTime)
 	)
+
+	var outFixture = []ooobot.Out{{
+		Channel: "test_channel_id",
+		User:    "test_user_id",
+		Start:   startDateFixture,
+		End:     endDateFixture,
+	}}
 
 	BeforeEach(func() {
 		apiMock = &ooobotfakes.FakeChatCompletionRequester{}
+		apiMock.CreateChatCompletionReturns(openai.ChatCompletionResponse{
+			Choices: []openai.ChatCompletionChoice{{
+				Message: openai.ChatCompletionMessage{
+					Content: "HAHA HILARIOUS MESSAGE",
+				},
+			}},
+		}, nil)
 		o = ooobot.New(apiMock)
 	})
 
@@ -35,10 +51,10 @@ var _ = Describe("Ooobot", func() {
 	})
 
 	Describe("HandleOutRequest", func() {
-		Context("when given a valid request", func() {
-			var rr *httptest.ResponseRecorder
+		var rr *httptest.ResponseRecorder
+		Context("with a single date", func() {
 			BeforeEach(func() {
-				b := bytes.NewBuffer([]byte(`token=fake_val&team_id=fake_val&team_domain=fake_val&channel_id=test_channel_id&channel_name=test_channel_name&user_id=test_user_id&user_name=test_user&command=%2Foutofoffice&text=2020-01-01+2020-01-01&api_app_id=fake_val&is_enterprise_install=true&response_url=fake_val`))
+				b := bytes.NewBuffer([]byte(`token=fake_val&team_id=fake_val&team_domain=fake_val&channel_id=test_channel_id&channel_name=test_channel_name&user_id=test_user_id&user_name=test_user&command=%2Foutofoffice&text=2020-01-01&api_app_id=fake_val&is_enterprise_install=true&response_url=fake_val`))
 
 				rr = httptest.NewRecorder()
 				req := httptest.NewRequest("POST", "/v1/outofoffice", b)
@@ -51,12 +67,34 @@ var _ = Describe("Ooobot", func() {
 			})
 
 			It("stores the request", func() {
-				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements(ooobot.Out{
+				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements(outFixture))
+			})
+		})
+
+		Context("with a date range", func() {
+			BeforeEach(func() {
+				b := bytes.NewBuffer([]byte(`token=fake_val&team_id=fake_val&team_domain=fake_val&channel_id=test_channel_id&channel_name=test_channel_name&user_id=test_user_id&user_name=test_user&command=%2Foutofoffice&text=2020-01-01+2020-01-02&api_app_id=fake_val&is_enterprise_install=true&response_url=fake_val`))
+
+				rr = httptest.NewRecorder()
+				req := httptest.NewRequest("POST", "/v1/outofoffice", b)
+
+				o.HandleOutRequest(rr, req)
+			})
+
+			It("stores multiple entries", func() {
+				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements([]ooobot.Out{{
 					Channel: "test_channel_id",
 					User:    "test_user_id",
 					Start:   startDateFixture,
-					End:     endDateFixture,
-				}))
+					End:     laterEndDateFixture,
+				}}))
+				Expect(o.GetOut(activeTimeFixture.AddDate(0, 0, 1))).To(HaveExactElements([]ooobot.Out{{
+					Channel: "test_channel_id",
+					User:    "test_user_id",
+					Start:   startDateFixture,
+					End:     laterEndDateFixture,
+				}}))
+				Expect(o.GetOut(activeTimeFixture.AddDate(0, 0, 2))).To(BeEmpty())
 			})
 		})
 
@@ -101,12 +139,7 @@ var _ = Describe("Ooobot", func() {
 			})
 
 			It("stores the Out", func() {
-				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements(ooobot.Out{
-					Channel: "test_channel_id",
-					User:    "test_user_id",
-					Start:   startDateFixture,
-					End:     endDateFixture,
-				}))
+				Expect(o.GetOut(activeTimeFixture)).To(HaveExactElements(outFixture))
 			})
 		})
 

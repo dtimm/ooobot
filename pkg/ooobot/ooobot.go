@@ -20,9 +20,10 @@ type Out struct {
 	Start   time.Time
 	End     time.Time
 }
+
 type Ooobot struct {
 	sync.Mutex
-	out      []Out
+	out      map[string][]Out
 	timezone *time.Location
 	ChatCompletionRequester
 }
@@ -35,6 +36,7 @@ type ChatCompletionRequester interface {
 func New(r ChatCompletionRequester) *Ooobot {
 	pacificTime, _ := time.LoadLocation("America/Los_Angeles")
 	return &Ooobot{
+		out:                     make(map[string][]Out),
 		timezone:                pacificTime,
 		ChatCompletionRequester: r,
 	}
@@ -146,7 +148,13 @@ func (o *Ooobot) AddOut(channel, user, start, end string) error {
 		End:     e.Add(time.Hour*23 + time.Minute*59 + time.Second*59),
 	}
 
-	o.out = append(o.out, out)
+	for d := s; !d.After(e); d = d.AddDate(0, 0, 1) {
+		if _, ok := o.out[d.Format("2006-01-02")]; !ok {
+			o.out[d.Format("2006-01-02")] = []Out{out}
+		} else {
+			o.out[d.Format("2006-01-02")] = append(o.out[d.Format("2006-01-02")], out)
+		}
+	}
 
 	fmt.Printf("added <@%s> out from %s to %s\n", user, start, end)
 
@@ -158,11 +166,7 @@ func (o *Ooobot) GetOut(t time.Time) []Out {
 	defer o.Unlock()
 
 	var r []Out
-	for _, out := range o.out {
-		if t.After(out.Start) && t.Before(out.End) {
-			r = append(r, out)
-		}
-	}
+	r = append(r, o.out[t.Format("2006-01-02")]...)
 
 	return r
 }
@@ -204,6 +208,9 @@ func parseText(t string) (string, string, error) {
 		return s[0], s[1], nil
 	} else if len(s) == 1 {
 		return s[0], s[0], nil
+	} else if len(s) == 0 {
+		today := time.Now().Format("2006-01-02")
+		return today, today, nil
 	}
 
 	return "", "", fmt.Errorf("invalid text: %s", t)
