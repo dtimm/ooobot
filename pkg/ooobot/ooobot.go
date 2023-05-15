@@ -209,10 +209,13 @@ func (o *Ooobot) makeItFunny(s string) string {
 		context.Background(),
 		openai.ChatCompletionRequest{
 			Temperature: 0.7,
-			Model:       openai.GPT4,
+			Model:       openai.GPT3Dot5Turbo,
 			Messages: []openai.ChatCompletionMessage{{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: "This is a bot that makes up creative and humerous reasons for people being out of the office. Each out-of-office message should be converted to a single creative and humerous reason.",
+			}, {
 				Role:    openai.ChatMessageRoleUser,
-				Content: fmt.Sprintf("Make up creative and humerous reasons for the following: %s", s),
+				Content: s,
 			}},
 		},
 	)
@@ -220,6 +223,8 @@ func (o *Ooobot) makeItFunny(s string) string {
 	if err != nil {
 		return s
 	}
+
+	fmt.Printf("Here it is, but funny: %s\n", resp.Choices[0].Message.Content)
 	return resp.Choices[0].Message.Content
 }
 
