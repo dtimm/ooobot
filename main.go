@@ -42,7 +42,7 @@ func main() {
 		} else {
 			fmt.Printf("req body: %s\n", b)
 		}
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusNotFound)
 	})
 
 	cr := cors.New(cors.Options{
