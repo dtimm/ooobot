@@ -21,6 +21,17 @@ type Out struct {
 	End     time.Time
 }
 
+func (o Out) String() string {
+	start := o.Start.Format("2006-01-02")
+	end := o.End.Format("2006-01-02")
+
+	if start == end {
+		return fmt.Sprintf("<@%s> out of the office on %s.", o.User, start)
+	}
+
+	return fmt.Sprintf("<@%s> out of the office from %s to %s.", o.User, o.Start.Format("2006-01-02"), o.End.Format("2006-01-02"))
+}
+
 type Ooobot struct {
 	sync.Mutex
 	out      map[string][]Out
@@ -104,28 +115,33 @@ func (o *Ooobot) HandleWhosOutRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outList := o.GetOut(time.Now())
-	sb := strings.Builder{}
-	for _, out := range outList {
-		if out.Channel != values.Get("channel_id") {
-			continue
-		}
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString(outString(out))
-	}
-	if sb.Len() == 0 {
-		sb.WriteString("No one is currently out of office.")
-	}
-
 	go func() {
-		s := strings.NewReader(fmt.Sprintf(`{"text": "%s"}`, o.makeItFunny(sb.String())))
+		outText := o.WhosOut(values.Get("channel_id"))
+		s := strings.NewReader(fmt.Sprintf(`{"text": "%s"}`, o.MakeItFunny(outText)))
 		u := values.Get("response_url")
 		http.Post(u, "application/json", s)
 	}()
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (o *Ooobot) WhosOut(c string) string {
+	outList := o.GetOut(time.Now())
+	sb := strings.Builder{}
+	for _, out := range outList {
+		if out.Channel != c {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(out.String())
+	}
+	if sb.Len() == 0 {
+		sb.WriteString("No one is currently out of office.")
+	}
+
+	return sb.String()
 }
 
 func (o *Ooobot) AddOut(channel, user, start, end string) error {
@@ -192,18 +208,7 @@ func (o *Ooobot) GetOut(t time.Time) []Out {
 	return r
 }
 
-func outString(out Out) string {
-	start := out.Start.Format("2006-01-02")
-	end := out.End.Format("2006-01-02")
-
-	if start == end {
-		return fmt.Sprintf("<@%s> out of the office on %s.", out.User, start)
-	}
-
-	return fmt.Sprintf("<@%s> out of the office from %s to %s.", out.User, out.Start.Format("2006-01-02"), out.End.Format("2006-01-02"))
-}
-
-func (o *Ooobot) makeItFunny(s string) string {
+func (o *Ooobot) MakeItFunny(s string) string {
 	fmt.Printf("making '%s' funny\n", s)
 	resp, err := o.ChatCompletionRequester.CreateChatCompletion(
 		context.Background(),

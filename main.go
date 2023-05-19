@@ -9,6 +9,7 @@ import (
 
 	"github.com/dtimm/ooobot/pkg/ooobot"
 	"github.com/sashabaranov/go-openai"
+	"github.com/slack-go/slack"
 
 	"github.com/gorilla/mux"
 	"github.com/jessevdk/go-flags"
@@ -16,15 +17,19 @@ import (
 )
 
 type options struct {
-	Port     int    `short:"p" long:"port" env:"PORT" description:"port to listen on" default:"8080"`
-	APIToken string `short:"t" long:"api-token" env:"OPENAI_API_KEY" description:"OpenAI API token"`
+	Port        int    `short:"p" long:"port" env:"PORT" description:"port to listen on" default:"8080"`
+	OpenAIToken string `short:"t" long:"openai-api-token" env:"OPENAI_API_KEY" description:"OpenAI API token"`
+	SlackToken  string `short:"s" long:"slack-oauth-token" env:"SLACK_OAUTH_TOKEN" description:"Slack OAuth token"`
 }
+
+var SLACK_OAUTH_TOKEN string
 
 func main() {
 	var opt options
 	flags.Parse(&opt)
 
-	c := openai.NewClient(opt.APIToken)
+	SLACK_OAUTH_TOKEN = opt.SlackToken
+	c := openai.NewClient(opt.OpenAIToken)
 	o := ooobot.New(c)
 
 	r := mux.NewRouter()
@@ -55,7 +60,39 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
-
 	fmt.Printf("Listening on %s\n", s.Addr)
+
+	go sendSlackMessages(o)
+
 	log.Fatal(s.ListenAndServe())
+}
+
+func sendSlackMessages(o *ooobot.Ooobot) {
+	ticker := time.NewTicker(60 * time.Second)
+	for range ticker.C {
+		api := slack.New(SLACK_OAUTH_TOKEN)
+
+		messages := generateMessages(o)
+		for c, t := range messages {
+			msg := o.MakeItFunny(t)
+			_, _, _, err := api.SendMessage(c, slack.MsgOptionText(msg, false))
+			if err != nil {
+				fmt.Printf("error sending message to channel %s: %s\n", c, err)
+			}
+		}
+	}
+}
+
+func generateMessages(o *ooobot.Ooobot) map[string]string {
+	channels := make(map[string]bool)
+	outList := o.GetOut(time.Now())
+	for _, out := range outList {
+		channels[out.Channel] = true
+	}
+
+	yeee := make(map[string]string)
+	for c := range channels {
+		yeee[c] = o.WhosOut(c)
+	}
+	return yeee
 }
