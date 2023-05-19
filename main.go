@@ -67,11 +67,24 @@ func main() {
 	log.Fatal(s.ListenAndServe())
 }
 
-func sendSlackMessages(o *ooobot.Ooobot) {
-	ticker := time.NewTicker(60 * time.Second)
-	for range ticker.C {
-		api := slack.New(SLACK_OAUTH_TOKEN)
+func ItsTime() bool {
+	pacificTime, _ := time.LoadLocation("America/Los_Angeles")
+	now := time.Now().In(pacificTime)
+	nine := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, pacificTime)
+	nineOFive := time.Date(now.Year(), now.Month(), now.Day(), 9, 5, 0, 0, pacificTime)
+	if now.Before(nine) || now.After(nineOFive) {
+		return false
+	}
+	return true
+}
 
+func sendSlackMessages(o *ooobot.Ooobot) {
+	ticker := time.NewTicker(300 * time.Second)
+	api := slack.New(SLACK_OAUTH_TOKEN)
+	for range ticker.C {
+		if !ItsTime() {
+			continue
+		}
 		messages := generateMessages(o)
 		for c, t := range messages {
 			msg := o.MakeItFunny(t)

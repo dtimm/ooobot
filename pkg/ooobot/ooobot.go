@@ -217,7 +217,7 @@ func (o *Ooobot) MakeItFunny(s string) string {
 			Model:       openai.GPT3Dot5Turbo,
 			Messages: []openai.ChatCompletionMessage{{
 				Role:    openai.ChatMessageRoleSystem,
-				Content: "This is a bot that makes up creative and humerous reasons for people being out of the office. Each out-of-office message should be converted to a single creative and humerous reason.",
+				Content: "This is a bot that makes up creative and humerous reasons for people being out of the office. The <@userid> formatting must be preserved. Each out-of-office message should be converted to a single creative and humerous reason, and it should not be about coffee.",
 			}, {
 				Role:    openai.ChatMessageRoleUser,
 				Content: s,
